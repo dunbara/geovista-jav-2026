@@ -14,6 +14,7 @@ import numpy as np
 import pyvista as pv
 from geopy.geocoders import Nominatim
 from matplotlib.colors import ListedColormap
+from geopy.exc import GeocoderUnavailable
 
 #
 # callback state
@@ -27,6 +28,11 @@ threshold = 0.2
 isosurfaces = 200
 isosurfaces_range = (0, 6)
 
+class GeocodeDummy:
+    def __init__(self,address,longitude,lattitude):
+        self.address = address
+        self.longtitude = longitude
+        self.lattitude = lattitude
 
 def rgb(r, g, b):
     return (r / 256, g / 256, b / 256, 1.0)
@@ -351,11 +357,13 @@ actor_plume = p.add_mesh(
 )
 p.view_poi()
 actor_scalar = p.add_scalar_bar(mapper=actor_plume.mapper, **sargs)
-
-geolocator = Nominatim(user_agent="geovista")
-location = geolocator.geocode("Raikoke", language="en")
-
-p.add_points(xs=location.longitude, ys=location.latitude, render_points_as_spheres=True, color="red", point_size=10)
+try:
+    geolocator = Nominatim(user_agent="geovista")
+    location = geolocator.geocode("Raikoke", language="en")
+    p.add_points(xs=location.longitude, ys=location.latitude, render_points_as_spheres=True, color="red", point_size=10)
+except GeocoderUnavailable:
+    print("Error: Geocoder Unavailable - possibly due to poor connection")
+    location = GeocodeDummy(address = "No address avilable (Geocode error)",lattitude=None,longitude=None)
 p.add_base_layer(texture=geovista.natural_earth_1(), zlevel=0, resolution="c192")
 p.add_coastlines(color="lightgray")
 p.add_mesh(line(-180, [90, 0, -90]), color="orange", line_width=3)
