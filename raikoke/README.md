@@ -1,0 +1,60 @@
+# Journal of Applied Volcanology
+
+## Installation
+
+Use `conda` to download and install the package dependencies that we require:
+
+```bash
+> conda env create --file env.yml
+```
+
+This will create a `conda` environment called `geovista-jav-2026` (`J`ournal of `A`pplied `V`olcanology):
+
+```bash
+> conda env list
+```
+
+
+Now activate the `conda` environment for use:
+
+```bash
+> conda activate geovista-jav-2026
+```
+
+This environment contains the latest development version of `geovista` from the `main`
+branch of the [bjlittle/geovista](https://github.com/bjlittle/geovista) GitHub repository,
+along with all of its **core** package dependencies. Most notably:
+
+- `iris`
+- `python` =3.13.*
+- `pyvista` <0.47
+- `pyvistaqt`
+
+To deactivate the `conda` environment, simply:
+
+```bash
+> conda deactivate
+```
+
+## QVA to NetCDF
+
+⚠️ Please ensure that the `geovista-jav-2026` environment is activated 👍
+
+The `NAME` model `QVA` files should be located in the `data` directory
+i.e., `QVA_grid1_*.txt`.
+
+To streamline the rendering process, we convert the multiple `QVA` files into a
+single `NetCDF` file. We also:
+
+- ensure to convert SI Units to `mg/m3`
+- calculate the data range
+- discard non-populated time steps in the series
+
+```bash
+> cd data
+> python convert.py
+> ls -l
+> cd ..
+```
+
+This will create the `data/volcanic_ash_air_concentration.nc` file.
