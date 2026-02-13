@@ -38,37 +38,12 @@ show_smooth = False
 threshold = 0.2
 isosurfaces = 200
 isosurfaces_range = (0, 6)
-iterations = 20
-passband = 0.1
 
 class GeocodeDummy:
-    def __init__(self,address,longitude,latitude):
+    def __init__(self,address,longitude,lattitude):
         self.address = address
-        self.longitude = longitude
-        self.latitude = latitude
-
-def calculate_qva_index(data):
-
-    data = np.where(data >= 10, 11, data)
-    data = np.where((data >= 5) & (data < 10), 7.5, data)
-    data = np.where((data >= 2) & (data < 5), 3.5, data)
-    data = np.where((data >= 0.2) & (data < 2), 1, data)
-    data = np.where(data < 0.2, 0, data)
-
-    return data
-
-def reset_time():
-    global tstep
-    tstep = 0
-    callback_render(None)
-    
-def time_evolve(pause):
-    global tstep
-    global n_tsteps
-    for i in range(n_tsteps):
-        sleep(pause)
-        tstep = i
-        callback_render(None)
+        self.longtitude = longitude
+        self.lattitude = lattitude
 
 def rgb(r, g, b):
     return (r / 256, g / 256, b / 256, 1.0)
