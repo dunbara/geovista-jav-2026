@@ -40,10 +40,10 @@ isosurfaces = 200
 isosurfaces_range = (0, 6)
 
 class GeocodeDummy:
-    def __init__(self,address,longitude,lattitude):
+    def __init__(self,address,longitude,latitude):
         self.address = address
         self.longtitude = longitude
-        self.lattitude = lattitude
+        self.latitude = latitude
 
 def rgb(r, g, b):
     return (r / 256, g / 256, b / 256, 1.0)
@@ -56,8 +56,10 @@ def rgba(r, g, b):
 def qva(vmin=0, vmax=13):
     N = 2560
     mapping = np.linspace(vmin, vmax, N, dtype=np.double)
+    mapping = np.linspace(vmin, vmax, N, dtype=np.double)
     colors = np.empty((N, 4))
 
+    c00 = rgba(211,211,211)   # 0.0-0.2 mg/m3 (very low)
     c00 = rgba(211,211,211)   # 0.0-0.2 mg/m3 (very low)
     c01 = rgba(160, 210, 255)   # 0.2-2.0 mg/m3 (low)
     c02 = rgba(255, 153, 0)     # 2.0-5.0 (medium)
