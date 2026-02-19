@@ -1,6 +1,12 @@
-"""Execute script with 'python -i <script>'."""
+"""trame imports"""
+from pyvista.trame.ui import plotter_ui
+from trame.app import get_server
+from trame.ui.vuetify3 import SinglePageLayout
+from trame.widgets import vuetify3 as v3
+
+"""main.py imports"""
 from pathlib import Path
-from time import sleep
+
 from cf_units import Unit
 import geovista
 from geovista.common import to_cartesian
@@ -16,6 +22,11 @@ from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderUnavailable
 from matplotlib.colors import ListedColormap
 
+# Always set PyVista to plot off screen with Trame
+#pv.OFF_SCREEN = True
+#geovista.OFF_SCREEN = True
+
+"""Main vis"""
 #
 # callback state
 #
@@ -33,19 +44,6 @@ class GeocodeDummy:
         self.address = address
         self.longtitude = longitude
         self.latitude = latitude
-
-def reset_time():
-    global tstep
-    tstep = 0
-    callback_render(None)
-    
-def time_evolve(pause):
-    global tstep
-    global n_tsteps
-    for i in range(n_tsteps):
-        sleep(pause)
-        tstep = i
-        callback_render(None)
 
 def rgb(r, g, b):
     return (r / 256, g / 256, b / 256, 1.0)
@@ -339,7 +337,7 @@ color = "white"
 
 frame = cache(mesh, data, tstep)
 
-p = GeoBackgroundPlotter()
+p = GeoBackgroundPlotter(show=False)
 p.set_background(color="black")
 
 sargs = {
@@ -551,4 +549,22 @@ p.add_text(
     color=color,
 )
 
-p.show()
+
+
+
+server = get_server()
+state, ctrl = server.state, server.controller
+
+with SinglePageLayout(server) as layout:
+    with layout.toolbar.clear() as tb:
+        tb.density = "compact"
+        tb.theme = "dark"
+        v3.VCardTitle("JAV: Raikoke Volcanic Ash Concentration")
+
+    #layout.title.set_text("JAV: Raikoke Volcanic Ash Concentration")
+    with layout.content:
+        # Use PyVista's Trame UI helper method
+        #  this will add UI controls
+        view = plotter_ui(p,mode="server",add_menu=False)
+
+server.start()

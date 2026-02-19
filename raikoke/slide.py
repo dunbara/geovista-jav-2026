@@ -1,6 +1,6 @@
 """Execute script with 'python -i <script>'."""
 from pathlib import Path
-from time import sleep
+
 from cf_units import Unit
 import geovista
 from geovista.common import to_cartesian
@@ -15,6 +15,7 @@ import pyvista as pv
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderUnavailable
 from matplotlib.colors import ListedColormap
+
 
 #
 # callback state
@@ -33,19 +34,6 @@ class GeocodeDummy:
         self.address = address
         self.longtitude = longitude
         self.latitude = latitude
-
-def reset_time():
-    global tstep
-    tstep = 0
-    callback_render(None)
-    
-def time_evolve(pause):
-    global tstep
-    global n_tsteps
-    for i in range(n_tsteps):
-        sleep(pause)
-        tstep = i
-        callback_render(None)
 
 def rgb(r, g, b):
     return (r / 256, g / 256, b / 256, 1.0)
@@ -373,7 +361,7 @@ actor_plume = p.add_mesh(
     annotations=annotations
 )
 p.view_poi()
-actor_scalar = p.add_scalar_bar(mapper=actor_plume.mapper, **sargs)
+#actor_scalar = p.add_scalar_bar(mapper=actor_plume.mapper, **sargs)
 
 try:
     geolocator = Nominatim(user_agent="geovista")
@@ -385,10 +373,10 @@ except GeocoderUnavailable:
 
 p.add_base_layer(texture=geovista.natural_earth_1(), zlevel=0, resolution="c192")
 p.add_coastlines(color="lightgray")
-p.add_mesh(line(-180, [90, 0, -90]), color="orange", line_width=3)
+#p.add_mesh(line(-180, [90, 0, -90]), color="orange", line_width=3)
 p.add_axes(color=color)
 
-p.add_text(f"{location.latitude}, {location.longitude}:\n{location.address}", position="upper_left", font_size=15, color=color, shadow=False)
+#p.add_text(f"{location.latitude}, {location.longitude}:\n{location.address}", position="upper_left", font_size=15, color=color, shadow=False)
 #p.add_text(f"{location.longitude},{location.latitude}", position="upper_left", font_size=15, color=color, shadow=False)
 
 text = unit.num2date(t.points[tstep]).strftime(fmt)
@@ -427,7 +415,7 @@ actor_threshold = p.add_slider_widget(
     title=f"Threshold ({str(cube.units)})",
     title_height=0.02,
 )
-
+"""
 actor_isosurfaces = p.add_slider_widget(
     callback_isosurfaces,
     (10, 3000),
@@ -550,5 +538,5 @@ p.add_text(
     font_size=font_size,
     color=color,
 )
-
+"""
 p.show()
