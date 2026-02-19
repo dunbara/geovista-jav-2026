@@ -1,6 +1,12 @@
-"""Execute script with 'python -i <script>'."""
+"""trame imports"""
+from pyvista.trame.ui import plotter_ui
+from trame.app import get_server
+from trame.ui.vuetify3 import SinglePageLayout
+from trame.widgets import vuetify3 as v3
+
+"""main.py imports"""
 from pathlib import Path
-from time import sleep
+
 from cf_units import Unit
 import geovista
 from geovista.common import to_cartesian
@@ -16,6 +22,11 @@ from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderUnavailable
 from matplotlib.colors import ListedColormap
 
+# Always set PyVista to plot off screen with Trame
+#pv.OFF_SCREEN = True
+#geovista.OFF_SCREEN = True
+
+"""Main vis"""
 #
 # callback state
 #
@@ -23,32 +34,16 @@ reset_clip = False
 show_clip = False
 show_edges = True
 show_isosurfaces = False
-show_opacity = False
 show_smooth = False
 threshold = 0.2
 isosurfaces = 200
 isosurfaces_range = (0, 6)
-iterations = 20
-passband = 0.1
 
 class GeocodeDummy:
     def __init__(self,address,longitude,latitude):
         self.address = address
         self.longtitude = longitude
         self.latitude = latitude
-
-def reset_time():
-    global tstep
-    tstep = 0
-    callback_render(None)
-    
-def time_evolve(pause):
-    global tstep
-    global n_tsteps
-    for i in range(n_tsteps):
-        sleep(pause)
-        tstep = i
-        callback_render(None)
 
 def rgb(r, g, b):
     return (r / 256, g / 256, b / 256, 1.0)
@@ -95,17 +90,42 @@ def cache(mesh, data, tstep) -> pv.UnstructuredGrid:
     return result
 
 
+def callback_clip(flag: bool) -> None:
+    global show_clip
+    global actor_checkbox_isosurface
+    global actor_isosurfaces
+    global actor_threshold
+    global actor_min
+    global actor_max
+
+    show_clip = bool(flag)
+
+    if show_clip:
+        actor_isosurfaces.GetRepresentation().SetVisibility(False)
+        actor_min.GetRepresentation().SetVisibility(False)
+        actor_max.GetRepresentation().SetVisibility(False)
+        actor_threshold.GetRepresentation().SetVisibility(False)
+    else:
+        state = bool(actor_checkbox_isosurface.GetRepresentation().GetState())
+        actor_isosurfaces.GetRepresentation().SetVisibility(state)
+        actor_min.GetRepresentation().SetVisibility(state)
+        actor_max.GetRepresentation().SetVisibility(state)
+        actor_threshold.GetRepresentation().SetVisibility(not state)
+
+    callback_render(None)
+
+
+def callback_edges(flag: bool) -> None:
+    global show_edges
+
+    show_edges = bool(flag)
+    callback_render(None)
+
+
 def callback_isosurfaces(value) -> None:
     global isosurfaces
 
     isosurfaces = int(f"{value:.0f}")
-    callback_render(None)
-
-
-def callback_iterations(value) -> None:
-    global iterations
-
-    iterations = int(f"{value:.0f}")
     callback_render(None)
 
 
@@ -137,10 +157,10 @@ def callback_min(min_value: float) -> None:
     callback_render(None)
 
 
-def callback_passband(value) -> None:
-    global passband
+def callback_smooth(flag: bool) -> None:
+    global show_smooth
 
-    passband = float(f"{value:.2f}")
+    show_smooth = bool(flag)
     callback_render(None)
 
 
@@ -151,128 +171,19 @@ def callback_threshold(value) -> None:
     callback_render(None)
 
 
-def checkbox_clip(flag: bool) -> None:
-    global show_clip
-    global show_isosurfaces
-    global show_smooth
-    global show_edges
-    global actor_checkbox_isosurface
-    global actor_isosurfaces
-    global actor_threshold
-    global actor_min
-    global actor_max
-    global actor_checkbox_smooth
-    global actor_iterations
-    global actor_passband
-    global actor_checkbox_edges
-
-    show_clip = bool(flag)
-
-    if show_clip:
-        actor_checkbox_isosurface.GetRepresentation().SetState(0)
-        actor_checkbox_smooth.GetRepresentation().SetState(0)
-        actor_checkbox_edges.GetRepresentation().SetState(1)
-
-        show_isosurfaces = False
-        show_smooth = False
-        show_edges = True
-
-        actor_isosurfaces.GetRepresentation().SetVisibility(False)
-        actor_min.GetRepresentation().SetVisibility(False)
-        actor_max.GetRepresentation().SetVisibility(False)
-        actor_threshold.GetRepresentation().SetVisibility(False)
-        actor_iterations.GetRepresentation().SetVisibility(False)
-        actor_passband.GetRepresentation().SetVisibility(False)
-    else:
-        actor_threshold.GetRepresentation().SetVisibility(True)
-
-    callback_render(None)
-
-
-def checkbox_edges(flag: bool) -> None:
-    global show_edges
-    global show_clip
-    global actor_checkbox_edges
-
-    if show_clip:
-        show_edges = True
-        actor_checkbox_edges.GetRepresentation().SetState(1)
-    else:
-        show_edges = bool(flag)
-
-    if not show_clip:
-        callback_render(None)
-
-
 def checkbox_isosurfaces(flag: bool) -> None:
     global show_isosurfaces
-    global show_clip
-    global show_smooth
     global actor_isosurfaces
     global actor_threshold
     global actor_min
     global actor_max
-    global actor_checkbox_isosurface
 
-    if show_clip:
-        show_isosurfaces = False
-        actor_checkbox_isosurface.GetRepresentation().SetState(0)
-        actor_threshold.GetRepresentation().SetVisibility(False)
-    else:
-        show_isosurfaces = bool(flag)
-
+    show_isosurfaces = bool(flag)
     actor_isosurfaces.GetRepresentation().SetVisibility(show_isosurfaces)
     actor_min.GetRepresentation().SetVisibility(show_isosurfaces)
     actor_max.GetRepresentation().SetVisibility(show_isosurfaces)
-
-    if not show_clip:
-        state = not show_isosurfaces
-        if state and show_smooth:
-            state = False
-        actor_threshold.GetRepresentation().SetVisibility(state)
-        callback_render(None)
-
-
-def checkbox_opacity(flag: bool) -> None:
-    global show_opacity
-    global actor_base
-    global p
-
-    show_opacity = bool(flag)
-
-    if show_opacity:
-        p.enable_depth_peeling()
-        actor_base.GetProperty().SetOpacity(0.5)
-    else:
-        p.disable_depth_peeling()
-        actor_base.GetProperty().SetOpacity(1.0)
-
-
-def checkbox_smooth(flag: bool) -> None:
-    global show_smooth
-    global show_clip
-    global show_isosurfaces
-    global actor_iterations
-    global actor_passband
-    global actor_threshold
-    global actor_checkbox_smooth
-
-    if show_clip:
-        show_smooth = False
-        actor_checkbox_smooth.GetRepresentation().SetState(0)
-        actor_threshold.GetRepresentation().SetVisibility(False)
-    else:
-        show_smooth = bool(flag)
-
-    actor_iterations.GetRepresentation().SetVisibility(show_smooth)
-    actor_passband.GetRepresentation().SetVisibility(show_smooth)
-
-    if not show_clip:
-        state = not show_smooth
-        if state and show_isosurfaces:
-            state = False
-        actor_threshold.GetRepresentation().SetVisibility(state)
-        callback_render(None)
+    actor_threshold.GetRepresentation().SetVisibility(not show_isosurfaces)
+    callback_render(None)
 
 
 def callback_render(value) -> None:
@@ -298,8 +209,6 @@ def callback_render(value) -> None:
     global show_clip
     global reset_clip
     global actor_scalar
-    global iterations
-    global passband
 
     if value is None:
         value = tstep
@@ -311,7 +220,7 @@ def callback_render(value) -> None:
 
     frame = cache(mesh, data, tstep)
 
-    if not show_isosurfaces and not show_smooth and threshold:
+    if not show_isosurfaces and threshold:
         frame = frame.threshold(threshold)
 
     if frame.is_empty:
@@ -324,6 +233,7 @@ def callback_render(value) -> None:
         if show_clip:
             xyz = np.asarray(frame.center)
             norm = np.linalg.norm(xyz)
+
 
             p.add_mesh_clip_plane(
                 frame,
@@ -344,8 +254,7 @@ def callback_render(value) -> None:
             opacity = None
             tcmap = cmap
             smooth_shading = False
-            tshow_edges = show_edges
-            show_scalar_bar = False
+            tshow_edges = show_edges    
 
             if p.plane_widgets:
                 p.plane_widgets.pop().Off()
@@ -353,12 +262,13 @@ def callback_render(value) -> None:
 
             if show_smooth:
                 frame = frame.clean(tolerance=1e-5).triangulate().extract_surface().smooth_taubin(
-                    n_iter=iterations,
-                    pass_band=passband,
+                    n_iter=50,
+                    pass_band=0.02,
                     normalize_coordinates=True,
                     feature_angle=30,
                     non_manifold_smoothing=True
                 )
+                smooth_shading = False
 
             if show_isosurfaces:
                 opacity = "linear_r"
@@ -366,8 +276,6 @@ def callback_render(value) -> None:
                 smooth_shading = True
                 tshow_edges = False
                 frame = frame.cell_data_to_point_data().contour(isosurfaces, rng=isosurfaces_range)
-                p.remove_actor(actor_scalar)
-                show_scalar_bar = True
 
             p.add_mesh(
                 frame,
@@ -382,14 +290,13 @@ def callback_render(value) -> None:
                 annotations=annotations,
                 opacity=opacity,
                 smooth_shading=smooth_shading,
-                show_scalar_bar=show_scalar_bar,
+                show_scalar_bar=False,
             )
 
-            if not show_isosurfaces:
-                p.add_actor(actor_scalar)
+            p.add_actor(actor_scalar)
     
     reset_clip = False
-    actor.SetText(0, unit.num2date(t.points[tstep]).strftime(fmt))
+    actor.SetText(3, unit.num2date(t.points[tstep]).strftime(fmt))
 
 
 # sort the assets in date ascending date order
@@ -430,7 +337,7 @@ color = "white"
 
 frame = cache(mesh, data, tstep)
 
-p = GeoBackgroundPlotter()
+p = GeoBackgroundPlotter(show=False)
 p.set_background(color="black")
 
 sargs = {
@@ -469,22 +376,21 @@ actor_scalar = p.add_scalar_bar(mapper=actor_plume.mapper, **sargs)
 try:
     geolocator = Nominatim(user_agent="geovista")
     location = geolocator.geocode("Raikoke", language="en")
-    p.add_points(xs=location.longitude, ys=location.latitude, render_points_as_spheres=True, color="yellow", point_size=10)
+    p.add_points(xs=location.longitude, ys=location.latitude, render_points_as_spheres=True, color="red", point_size=10)
 except GeocoderUnavailable:
     print("Error: Geocoder Unavailable - possibly due to poor connection")
     location = GeocodeDummy(address = "No address avilable (Geocode error)",latitude=None,longitude=None)
 
-actor_base = p.add_base_layer(texture=geovista.natural_earth_1(), zlevel=0, resolution="c192")
+p.add_base_layer(texture=geovista.natural_earth_1(), zlevel=0, resolution="c192")
 p.add_coastlines(color="lightgray")
+p.add_mesh(line(-180, [90, 0, -90]), color="orange", line_width=3)
 p.add_axes(color=color)
 
 p.add_text(f"{location.latitude}, {location.longitude}:\n{location.address}", position="upper_left", font_size=15, color=color, shadow=False)
 #p.add_text(f"{location.longitude},{location.latitude}", position="upper_left", font_size=15, color=color, shadow=False)
 
 text = unit.num2date(t.points[tstep]).strftime(fmt)
-actor = p.add_text(text, position="lower_left", font_size=15, color=color, shadow=False)
-
-p.add_logo_widget("images/raikoke_inset.png", position=(0.93, 0.91), size=(0.08, 0.08))
+actor = p.add_text(text, position="upper_right", font_size=10, color=color, shadow=False)
 
 #
 # sliders
@@ -495,7 +401,7 @@ p.add_slider_widget(
     (0, n_tsteps-1),
     value=0,
     pointa=(0.55, 0.90),
-    pointb=(0.90, 0.90),
+    pointb=(0.95, 0.90),
     color=color,
     fmt="%.0f",
     style="modern",
@@ -510,7 +416,7 @@ actor_threshold = p.add_slider_widget(
     (0.2, 5),
     value=threshold,
     pointa=(0.55, 0.80),
-    pointb=(0.90, 0.80),
+    pointb=(0.95, 0.80),
     color=color,
     fmt="%.2f",
     style="modern",
@@ -524,7 +430,7 @@ actor_isosurfaces = p.add_slider_widget(
     callback_isosurfaces,
     (10, 3000),
     value=isosurfaces,
-    pointa=(0.10, 0.90),
+    pointa=(0.05, 0.90),
     pointb=(0.45, 0.90),
     color=color,
     fmt="%.0f",
@@ -541,7 +447,7 @@ actor_min = p.add_slider_widget(
     callback_min,
     isosurfaces_range,
     value=vmin,
-    pointa=(0.10, 0.80),
+    pointa=(0.05, 0.80),
     pointb=(0.45, 0.80),
     color=color,
     fmt="%.2f",
@@ -557,7 +463,7 @@ actor_max = p.add_slider_widget(
     callback_max,
     isosurfaces_range,
     value=vmax,
-    pointa=(0.10, 0.80),
+    pointa=(0.05, 0.80),
     pointb=(0.45, 0.80),
     color=color,
     fmt="%.2f",
@@ -568,50 +474,17 @@ actor_max = p.add_slider_widget(
 )
 actor_max.GetRepresentation().SetVisibility(False)
 
-actor_iterations = p.add_slider_widget(
-    callback_iterations,
-    (5, 100),
-    value=iterations,
-    pointa=(0.55, 0.80),
-    pointb=(0.90, 0.80),
-    color=color,
-    fmt="%.0f",
-    style="modern",
-    slider_width=0.02,
-    tube_width=0.001,
-    title="Iterations",
-    title_height=0.02,
-)
-actor_iterations.GetRepresentation().SetVisibility(False)
-
-actor_passband = p.add_slider_widget(
-    callback_passband,
-    (0.01, 2),
-    value=passband,
-    pointa=(0.55, 0.70),
-    pointb=(0.90, 0.70),
-    color=color,
-    fmt="%.2f",
-    style="modern",
-    slider_width=0.02,
-    tube_width=0.001,
-    title="Passband",
-    title_height=0.02,
-)
-actor_passband.GetRepresentation().SetVisibility(False)
-
-
 #
 # checkboxes
 #
 
 size, pad = 25, 3
-x, y = 10, 95
+x, y = 10, 100
 offset = size * 0.2
 font_size = 10
 
-actor_checkbox_smooth = p.add_checkbox_button_widget(
-    checkbox_smooth,
+p.add_checkbox_button_widget(
+    callback_smooth,
     value=show_smooth,
     color_on="green",
     color_off="red",
@@ -620,23 +493,6 @@ actor_checkbox_smooth = p.add_checkbox_button_widget(
 )
 p.add_text(
     "Smooth",
-    position=(x + size + offset, y),
-    font_size=font_size,
-    color=color,
-)
-
-y += size + pad
-
-actor_checkbox_opacity = p.add_checkbox_button_widget(
-    checkbox_opacity,
-    value=show_opacity,
-    color_on="green",
-    color_off="red",
-    size=size,
-    position=(x, y),
-)
-p.add_text(
-    "Opacity",
     position=(x + size + offset, y),
     font_size=font_size,
     color=color,
@@ -661,8 +517,8 @@ p.add_text(
 
 y += size + pad
 
-actor_checkbox_edges = p.add_checkbox_button_widget(
-    checkbox_edges,
+p.add_checkbox_button_widget(
+    callback_edges,
     value=show_edges,
     color_on="green",
     color_off="red",
@@ -679,7 +535,7 @@ p.add_text(
 y += size + pad
 
 p.add_checkbox_button_widget(
-    checkbox_clip,
+    callback_clip,
     value=show_clip,
     color_on="green",
     color_off="red",
@@ -693,4 +549,22 @@ p.add_text(
     color=color,
 )
 
-p.show()
+
+
+
+server = get_server()
+state, ctrl = server.state, server.controller
+
+with SinglePageLayout(server) as layout:
+    with layout.toolbar.clear() as tb:
+        tb.density = "compact"
+        tb.theme = "dark"
+        v3.VCardTitle("JAV: Raikoke Volcanic Ash Concentration")
+
+    #layout.title.set_text("JAV: Raikoke Volcanic Ash Concentration")
+    with layout.content:
+        # Use PyVista's Trame UI helper method
+        #  this will add UI controls
+        view = plotter_ui(p,mode="server",add_menu=False)
+
+server.start()
