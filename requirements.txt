@@ -21,6 +21,4 @@ geopy
 setuptools >=80.9.0,<81
 setuptools-scm >=8.3.1,<9
 git+https://github.com/bjlittle/geovista.git@main 
-trame
-trame-vtk
-trame-vuetify
+
