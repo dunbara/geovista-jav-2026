@@ -1,6 +1,7 @@
 """Execute script with 'python -i <script>'."""
 from pathlib import Path
 from time import sleep
+from time import sleep
 from cf_units import Unit
 import geovista
 from geovista.common import to_cartesian
@@ -13,6 +14,7 @@ import netCDF4 as nc
 import numpy as np
 import pyvista as pv
 from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderUnavailable
 from geopy.exc import GeocoderUnavailable
 from matplotlib.colors import ListedColormap
 
@@ -62,6 +64,53 @@ def time_evolve(pause):
         tstep = i
         callback_render(None)
 
+class GeocodeDummy:
+    def __init__(self,address,longitude,latitude):
+        self.address = address
+        self.longitude = longitude
+        self.latitude = latitude
+
+def calculate_qva_index(data):
+
+    data = np.where(data >= 10, 11, data)
+    data = np.where((data >= 5) & (data < 10), 7.5, data)
+    data = np.where((data >= 2) & (data < 5), 3.5, data)
+    data = np.where((data >= 0.2) & (data < 2), 1, data)
+    data = np.where(data < 0.2, 0, data)
+
+    return data
+
+def reset_time():
+    global tstep
+    tstep = 0
+    callback_render(None)
+    
+def time_evolve(pause):
+    global tstep
+    global n_tsteps
+    for i in range(n_tsteps):
+        sleep(pause)
+        tstep = i
+        callback_render(None)
+class GeocodeDummy:
+    def __init__(self,address,longitude,latitude):
+        self.address = address
+        self.longtitude = longitude
+        self.latitude = latitude
+
+def reset_time():
+    global tstep
+    tstep = 0
+    callback_render(None)
+    
+def time_evolve(pause):
+    global tstep
+    global n_tsteps
+    for i in range(n_tsteps):
+        sleep(pause)
+        tstep = i
+        callback_render(None)
+
 def rgb(r, g, b):
     return (r / 256, g / 256, b / 256, 1.0)
 
@@ -73,8 +122,10 @@ def rgba(r, g, b):
 def qva(vmin=0, vmax=13):
     N = 2560
     mapping = np.linspace(vmin, vmax, N, dtype=np.double)
+    mapping = np.linspace(vmin, vmax, N, dtype=np.double)
     colors = np.empty((N, 4))
 
+    c00 = rgba(211,211,211)   # 0.0-0.2 mg/m3 (very low)
     c00 = rgba(211,211,211)   # 0.0-0.2 mg/m3 (very low)
     c01 = rgba(160, 210, 255)   # 0.2-2.0 mg/m3 (low)
     c02 = rgba(255, 153, 0)     # 2.0-5.0 (medium)
@@ -85,6 +136,7 @@ def qva(vmin=0, vmax=13):
     colors[mapping < 10] = c03
     colors[mapping < 5] = c02
     colors[mapping < 2] = c01
+    colors[mapping < 0.2] = c00
     colors[mapping < 0.2] = c00
 
     return ListedColormap(colors, N=N)
