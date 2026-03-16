@@ -65,7 +65,7 @@ def rgba(r, g, b):
 
 def qva(vmin=0, vmax=13):
     N = 2560
-    mapping = np.linspace(vmin, vmax, N, dtype=int)
+    mapping = np.linspace(vmin, vmax, N, dtype=np.double)
     colors = np.empty((N, 4))
 
     c01 = rgba(160, 210, 255)   # 0.2-2.0 mg/m3 (low)
