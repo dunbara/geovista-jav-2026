@@ -19,7 +19,6 @@ import netCDF4 as nc
 import numpy as np
 import pyvista as pv
 from geopy.geocoders import Nominatim
-from geopy.exc import GeocoderUnavailable
 from matplotlib.colors import ListedColormap
 
 BASE_DIR = Path(__file__).parent
@@ -30,8 +29,6 @@ BASE_DIR = Path(__file__).parent
 reset_clip = False
 show_clip = False
 show_edges = True
-color_by_qva_index = True
-active_scalar = "qva_index"
 show_isosurfaces = False
 show_opacity = False
 show_smooth = False
@@ -71,7 +68,6 @@ def qva(vmin=0, vmax=13):
     mapping = np.linspace(vmin, vmax, N, dtype=np.double)
     colors = np.empty((N, 4))
 
-    c00 = rgba(211,211,211)   # 0.0-0.2 mg/m3 (very low)
     c01 = rgba(160, 210, 255)   # 0.2-2.0 mg/m3 (low)
     c02 = rgba(255, 153, 0)     # 2.0-5.0 (medium)
     c03 = rgba(255, 40, 0)      # 5.0-10.0 (high)
@@ -81,7 +77,6 @@ def qva(vmin=0, vmax=13):
     colors[mapping < 10] = c03
     colors[mapping < 5] = c02
     colors[mapping < 2] = c01
-    colors[mapping < 0.2] = c00
 
     return ListedColormap(colors, N=N)
 
@@ -93,8 +88,6 @@ def cache(mesh, data, tstep) -> pv.UnstructuredGrid:
     if not fname.exists():
         tdata = np.ma.masked_less_equal(data[tstep][:], 0).filled(np.nan).flatten()
         mesh["data"] = tdata
-        qva_index = calculate_qva_index(data[tstep][:]).flatten()
-        mesh["qva_index"] = qva_index
         to_wkt(mesh, WGS84)
         mesh.active_scalars_name = "data"
         tmp = mesh.threshold()
@@ -257,11 +250,6 @@ def checkbox_opacity(flag: bool) -> None:
         p.disable_depth_peeling()
         actor_base.GetProperty().SetOpacity(1.0)
 
-def toggle_active_scalar(flag: bool) -> None:
-    global active_scalar
-    active_scalar = "qva_index" if flag else "data"
-    print(f"Active scalar: {active_scalar}")
-    callback_render(None)
 
 def checkbox_smooth(flag: bool) -> None:
     global show_smooth
@@ -315,7 +303,6 @@ def callback_render(value) -> None:
     global actor_scalar
     global iterations
     global passband
-    global active_scalar
 
     if value is None:
         value = tstep
@@ -352,7 +339,6 @@ def callback_render(value) -> None:
                 reset_camera=False,
                 show_edges=True,
                 edge_color="gray",
-                scalars=active_scalar,
                 cmap=cmap,
                 clim=clim,
                 show_scalar_bar=False,
@@ -389,7 +375,6 @@ def callback_render(value) -> None:
             p.add_mesh(
                 frame,
                 name="plume",
-                scalars=active_scalar,
                 cmap=tcmap,
                 clim=clim,
                 render=False,
@@ -432,30 +417,25 @@ tstep = 0
 y_cb = y.contiguous_bounds()
 x_cb = x.contiguous_bounds()
 z_cb = z.contiguous_bounds()
+z_fix = np.arange(*z_cb.shape) * np.mean(np.diff(y_cb)) * 3
 
-#z_fix = np.arange(*z_cb.shape) * np.mean(np.diff(y_cb)) * 3
-Re = 6371 * 1000 * 3.281 #Earth radius in feet taking 1 m = 3.281 Ft
-zscale = np.mean(np.diff(y_cb))*(np.pi/180)/(np.mean(np.diff(z_cb))*100/Re) #mean latitude step (radians)/mean altitude step (feet) over Earth Radius
-z_h =(z_cb*100)/Re*zscale
-
-xx, yy, zz = np.meshgrid(x_cb, y_cb, z_h, indexing="ij")
+xx, yy, zz = np.meshgrid(x_cb, y_cb, z_fix, indexing="ij")
 shape = xx.shape
 
 dmin, dmax = 0.0, 13
 clim = (dmin, dmax)
 
-xyz = to_cartesian(xx, yy, zlevel=zz, zscale=1)
+xyz = to_cartesian(xx, yy, zlevel=zz, zscale=0.005)
 mesh = pv.StructuredGrid(xyz[:, 0].reshape(shape), xyz[:, 1].reshape(shape), xyz[:, 2].reshape(shape))
 
 cmap = qva()
-color = "white"
-
+color = "black"
 
 frame = cache(mesh, data, tstep)
 
 p = GeoBackgroundPlotter()
 p.set_background(color="black")
-#p.add_mesh(mesh)
+
 sargs = {
     "color": color,
     "title": f"{capitalise(cube.name())} ({str(cube.units)})",
@@ -465,8 +445,6 @@ sargs = {
 }
 
 annotations = {
-    0.0 : "",
-    0.2: "0.2",
     # 1.0: "Low",
     2.0: "2.0",
     # 3.5: "Medium",
@@ -479,7 +457,6 @@ annotations = {
 actor_plume = p.add_mesh(
     frame,
     name="plume",
-    scalars=active_scalar,
     cmap=cmap,
     clim=clim,
     show_scalar_bar=False,
@@ -503,8 +480,7 @@ actor_base = p.add_base_layer(texture=geovista.natural_earth_1(), zlevel=0, reso
 p.add_coastlines(color="lightgray")
 p.add_axes(color=color)
 
-p.add_text(f"Latitude: {raikoke.latitude}" + r'$\degree$'+ f", Longitude: {raikoke.longitude}" + r'$\degree$'+f"\n{raikoke.address} \n Vertical Scale Factor: x{zscale:.2f}", position="upper_left", font_size=15, color=color, shadow=False)
-#p.add_text(f"{location.longitude},{location.latitude}", position="upper_left", font_size=15, color=color, shadow=False)
+p.add_text(location.address, position="upper_left", font_size=15, color=color, shadow=False)
 
 text = unit.num2date(t.points[tstep]).strftime(fmt)
 actor = p.add_text(text, position="lower_left", font_size=15, color=color, shadow=False)
@@ -533,7 +509,7 @@ p.add_slider_widget(
 
 actor_threshold = p.add_slider_widget(
     callback_threshold,
-    (0.2, 10),
+    (0.2, 5),
     value=threshold,
     pointa=(0.55, 0.80),
     pointb=(0.90, 0.80),
@@ -714,23 +690,6 @@ p.add_checkbox_button_widget(
 )
 p.add_text(
     "Clip",
-    position=(x + size + offset, y),
-    font_size=font_size,
-    color=color,
-)
-
-y+= size + pad
-
-p.add_checkbox_button_widget(
-    toggle_active_scalar,
-    value=color_by_qva_index,
-    color_on="green",
-    color_off="red",
-    size=size,
-    position=(x, y),
-)
-p.add_text(
-    "Colour by QVA Index",
     position=(x + size + offset, y),
     font_size=font_size,
     color=color,
