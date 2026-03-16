@@ -39,6 +39,22 @@ iterations = 20
 passband = 0.1
 
 
+class GeocodeDummy:
+    def __init__(self,address,longitude,latitude):
+        self.address = address
+        self.longitude = longitude
+        self.latitude = latitude
+
+def calculate_qva_index(data):
+
+    data = np.where(data >= 10, 11, data)
+    data = np.where((data >= 5) & (data < 10), 7.5, data)
+    data = np.where((data >= 2) & (data < 5), 3.5, data)
+    data = np.where((data >= 0.2) & (data < 2), 1, data)
+    data = np.where(data < 0.2, 0, data)
+
+    return data
+
 def rgb(r, g, b):
     return (r / 256, g / 256, b / 256, 1.0)
 
@@ -413,7 +429,7 @@ xyz = to_cartesian(xx, yy, zlevel=zz, zscale=0.005)
 mesh = pv.StructuredGrid(xyz[:, 0].reshape(shape), xyz[:, 1].reshape(shape), xyz[:, 2].reshape(shape))
 
 cmap = qva()
-color = "white"
+color = "black"
 
 frame = cache(mesh, data, tstep)
 
@@ -451,10 +467,15 @@ actor_plume = p.add_mesh(
 p.view_poi()
 actor_scalar = p.add_scalar_bar(mapper=actor_plume.mapper, **sargs)
 
-geolocator = Nominatim(user_agent="geovista")
-location = geolocator.geocode("Raikoke", language="en")
+try:
+    geolocator = Nominatim(user_agent="geovista")
+    location = geolocator.geocode("Raikoke", language="en")
+except GeocoderUnavailable:
+    print("Error: Geocoder Unavailable - possibly due to poor connection")
+    location = GeocodeDummy(address = "No address avilable (Geocode error)",latitude=153.25,longitude=48.292)
+raikoke = GeocodeDummy(address=location.address, latitude=153.25, longitude=48.292)
 
-p.add_points(xs=location.longitude, ys=location.latitude, render_points_as_spheres=True, color="yellow", point_size=10)
+p.add_points(xs=raikoke.latitude, ys=raikoke.longitude, render_points_as_spheres=True, color="yellow", point_size=10)
 actor_base = p.add_base_layer(texture=geovista.natural_earth_1(), zlevel=0, resolution="c192")
 p.add_coastlines(color="lightgray")
 p.add_axes(color=color)
