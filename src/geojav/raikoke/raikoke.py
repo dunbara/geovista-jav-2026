@@ -22,6 +22,7 @@ from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderUnavailable
 from matplotlib.colors import ListedColormap
 
+from six.moves import cPickle as pickle
 BASE_DIR = Path(__file__).parent
 
 #
@@ -41,12 +42,154 @@ passband = 0.1
 color_by_qva_index = True
 active_scalar = "qva_index"
 
+ForceClip = False
+center = None
+normal = None
+
+class state_init:
+
+    global reset_clip  
+    global show_clip
+    global show_edges
+    global show_isosurfaces
+    global show_opacity
+    global show_smooth
+    global threshold
+    global isosurfaces
+    global isosurfaces_range
+    global iterations
+    global passband
+    global color_by_qva_index
+    global active_scalar
+    global tstep
+
+
+    def __init__(self,plotter):
+        self.reset_clip = reset_clip
+        self.show_clip = show_clip
+        self.show_edges = show_edges
+        self.show_isosurfaces = show_isosurfaces
+        self.show_opacity = show_opacity
+        self.show_smooth = show_smooth
+        self.threshold = threshold
+        self.isosurfaces = isosurfaces
+        self.isosurfaces_range = isosurfaces_range
+        self.iterations = iterations
+        self.passband = passband
+        self.color_by_qva_index = color_by_qva_index
+        self.active_scalar = active_scalar
+
+        self.tstep = tstep
+
+        self.camera_position = plotter.camera_position
+        #clip plane
+        self.plane_center = plotter.plane_widgets[-1].GetCenter() if show_clip else None
+        self.plane_normal = plotter.plane_widgets[-1].GetNormal() if show_clip else None
+
+
+
+
 
 class GeocodeDummy:
     def __init__(self,address,longitude,latitude):
         self.address = address
         self.longitude = longitude
         self.latitude = latitude
+
+def save_state(fname):
+    global p
+    state = state_init(p)
+    with open(fname, 'wb') as f:
+        pickle.dump(state, f)
+    f.close()
+    return True
+
+def load_state(fname):
+    f = open(fname, 'rb')
+    loaded_state = pickle.load(f)
+    f.close()
+    return loaded_state
+
+def view_state(state):
+    global reset_clip
+    global show_clip
+    global show_edges
+    global show_isosurfaces
+    global show_opacity
+    global show_smooth
+    global threshold
+    global isosurfaces
+    global isosurfaces_range
+    global iterations
+    global passband
+    global color_by_qva_index
+    global active_scalar
+    global tstep
+    global p
+    #sliders
+    global time_slider
+    global actor_threshold
+    global actor_isosurfaces
+    global actor_min
+    global actor_max
+    global actor_iterations
+    global actor_passband
+    #checkboxes
+    global actor_checkbox_smooth
+    global actor_checkbox_opacity
+    global actor_checkbox_isosurface
+    global actor_checkbox_edges
+    global actor_checkbox_clip
+    global actor_checkbox_color_by_qva_index
+    #clip plane
+    global center
+    global normal
+    global ForceClip
+
+    reset_clip = state.reset_clip
+    show_clip = state.show_clip
+    show_edges = state.show_edges
+    show_isosurfaces = state.show_isosurfaces
+    show_opacity = state.show_opacity
+    show_smooth = state.show_smooth
+    threshold = state.threshold
+    isosurfaces = state.isosurfaces
+    isosurfaces_range = state.isosurfaces_range
+    iterations = state.iterations
+    passband = state.passband
+    color_by_qva_index = state.color_by_qva_index
+    active_scalar = state.active_scalar
+    tstep = state.tstep
+
+    #forcing sliders to move to the correct position
+    time_slider.GetRepresentation().SetValue(tstep)
+    actor_threshold.GetRepresentation().SetValue(threshold)
+    actor_isosurfaces.GetRepresentation().SetValue(isosurfaces)
+    actor_min.GetRepresentation().SetValue(isosurfaces_range[0])
+    actor_max.GetRepresentation().SetValue(isosurfaces_range[1])
+    actor_iterations.GetRepresentation().SetValue(iterations)
+    actor_passband.GetRepresentation().SetValue(passband)
+    #force checkbox states
+    actor_checkbox_smooth.GetRepresentation().SetState(show_smooth)
+    actor_checkbox_opacity.GetRepresentation().SetState(show_opacity)
+    actor_checkbox_isosurface.GetRepresentation().SetState(show_isosurfaces)
+    actor_checkbox_edges.GetRepresentation().SetState(show_edges)
+    actor_checkbox_clip.GetRepresentation().SetState(show_clip)
+    actor_checkbox_color_by_qva_index.GetRepresentation().SetState(color_by_qva_index)
+    #Handle Clip visibility
+    checkbox_clip(show_clip)
+    if show_clip:
+        ForceClip = True
+        reset_clip = True
+        normal=state.plane_normal
+        center=state.plane_center
+    #camera position    
+    p.camera_position = state.camera_position
+
+    callback_render(tstep)
+
+    p.render()
+    ForceClip = False
 
 def calculate_qva_index(data):
 
@@ -259,7 +402,11 @@ def checkbox_opacity(flag: bool) -> None:
 
 def toggle_active_scalar(flag: bool) -> None:
     global active_scalar
+    global show_clip
+    global reset_clip
     active_scalar = "qva_index" if flag else "data"
+    if show_clip:
+        reset_clip = True
     print(f"Active scalar: {active_scalar}")
     callback_render(None)
 
@@ -316,6 +463,10 @@ def callback_render(value) -> None:
     global iterations
     global passband
     global active_scalar
+    global normal
+    global center
+    global ForceClip
+
 
     if value is None:
         value = tstep
@@ -335,16 +486,18 @@ def callback_render(value) -> None:
     else:
         if reset_clip:
             if p.plane_widgets:
-                p.plane_widgets.pop().Off()
-
+                for plane_widget in p.plane_widgets:
+                    plane_widget.Off()
         if show_clip:
-            xyz = np.asarray(frame.center)
-            norm = np.linalg.norm(xyz)
-
+            if not ForceClip:
+                center = np.asarray(frame.center)
+                norm = np.linalg.norm(center)
+                normal = -center/norm
             p.add_mesh_clip_plane(
                 frame,
                 widget_color=color,
-                normal=-xyz / norm,
+                normal=normal,
+                origin=center,
                 implicit=False,
                 outline_translation=True,
                 name="plume",
@@ -365,7 +518,9 @@ def callback_render(value) -> None:
             show_scalar_bar = False
 
             if p.plane_widgets:
-                p.plane_widgets.pop().Off()
+                for plane_widget in p.plane_widgets:
+                    plane_widget.Off()
+                #p.plane_widgets.pop().Off()
                 p.remove_actor("plume")
 
             if show_smooth:
@@ -424,7 +579,7 @@ y = cube.coord("latitude")
 x = cube.coord("longitude")
 
 unit = Unit(t.units)
-fmt = "%Y-%m-%d %H:%M UTC%z"
+fmt = "%Y-%m-%d %H:%M UTC"
 
 n_tsteps = t.shape[0]
 tstep = 0
@@ -516,7 +671,7 @@ p.add_logo_widget(fname, position=(0.93, 0.91), size=(0.08, 0.08))
 # sliders
 #
 
-p.add_slider_widget(
+time_slider = p.add_slider_widget(
     callback_render,
     (0, n_tsteps-1),
     value=0,
@@ -704,7 +859,7 @@ p.add_text(
 
 y += size + pad
 
-p.add_checkbox_button_widget(
+actor_checkbox_clip = p.add_checkbox_button_widget(
     checkbox_clip,
     value=show_clip,
     color_on="green",
@@ -721,7 +876,7 @@ p.add_text(
 
 y+= size + pad
 
-p.add_checkbox_button_widget(
+actor_checkbox_color_by_qva_index = p.add_checkbox_button_widget(
     toggle_active_scalar,
     value=color_by_qva_index,
     color_on="green",
