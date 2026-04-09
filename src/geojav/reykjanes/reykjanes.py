@@ -422,9 +422,14 @@ n_tsteps = t.shape[0]
 tstep = 0
 
 y_cb = y.contiguous_bounds()
-x_cb = x.contiguous_bounds()
-z_cb = z.contiguous_bounds()
-z_fix = np.arange(*z_cb.shape) * np.mean(np.diff(x_cb)) * 2
+x_cb = x.contiguous_bounds() #degrees
+z_cb = z.contiguous_bounds() #in m
+
+Re = 6371000 # Earth radius in m
+z_h = z_cb/Re #z_cb in Earth radii
+
+zscale = np.mean(np.diff(y_cb))*(np.pi/180) / (2*np.mean(np.diff(z_h))) #
+z_fix = z_h
 
 xx, yy, zz = np.meshgrid(x_cb, y_cb, z_fix, indexing="ij")
 shape = xx.shape
@@ -435,7 +440,7 @@ clim = clim_log_scale if log_scale else clim_isosurfaces
 
 isosurfaces_range = clim_isosurfaces
 
-xyz = to_cartesian(xx, yy, zlevel=zz, zscale=0.005)
+xyz = to_cartesian(xx, yy, zlevel=zz, zscale=zscale)
 mesh = pv.StructuredGrid(xyz[:, 0].reshape(shape), xyz[:, 1].reshape(shape), xyz[:, 2].reshape(shape))
 
 domain = mesh.extract_feature_edges()
@@ -487,8 +492,8 @@ actor = p.add_text(text, position="lower_left", font_size=15, color=color, shado
 fname = BASE_DIR / "images" / "reykjanes_inset.png"
 p.add_logo_widget(fname, position=(0.00, 0.91), size=(0.08, 0.08))
 
-p.add_text(f"Sundhnúkur: {-1*location.longitude}" + r'$\degree$W'+ f" {location.latitude}" + r'$\degree$N', position=(0.08,0.94),viewport=True, font_size=15, color=color, shadow=False)
-p.add_text(f"{location.address}", position=(0.08,0.91),viewport=True, font_size=10, color=color, shadow=False)# \nVertical Scale Factor: x{zscale:.2f}")
+p.add_text(f"Sundhnúkur: {-1*location.longitude}" + r'$\degree$W'+ f" {location.latitude}" + r'$\degree$N', position=(0.08,0.95),viewport=True, font_size=15, color=color, shadow=False)
+p.add_text(f"{location.address}\nVertical Scale Factor: x{zscale:.2f}", position=(0.08,0.90),viewport=True, font_size=10, color=color, shadow=False)# )
 
 #
 # sliders
@@ -511,7 +516,7 @@ p.add_slider_widget(
 
 actor_threshold = p.add_slider_widget(
     callback_threshold,
-    (0.0, 500.0),
+    (0.1, 500.0),
     value=threshold,
     pointa=(0.55, 0.80),
     pointb=(0.90, 0.80),

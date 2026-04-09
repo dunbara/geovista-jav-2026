@@ -465,7 +465,7 @@ shape = xx.shape
 dmin, dmax = 0.0, 13
 clim = (dmin, dmax)
 
-xyz = to_cartesian(xx, yy, zlevel=zz, zscale=0.005)
+xyz = to_cartesian(xx, yy, zlevel=zz, zscale=1)
 mesh = pv.StructuredGrid(xyz[:, 0].reshape(shape), xyz[:, 1].reshape(shape), xyz[:, 2].reshape(shape))
 
 cmap = qva()
