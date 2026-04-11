@@ -40,6 +40,11 @@ iterations = 20
 passband = 0.1
 log_scale = True
 
+class GeocodeDummy:
+    def __init__(self,address,longitude,latitude):
+        self.address = address
+        self.longitude = longitude
+        self.latitude = latitude
 
 def cache(mesh, data, tstep) -> pv.UnstructuredGrid:
     tdir = BASE_DIR / "vtk"
@@ -411,15 +416,20 @@ y = cube.coord("latitude")
 x = cube.coord("longitude")
 
 unit = Unit(t.units)
-fmt = "%Y-%m-%d %H:%M"
+fmt = "%Y-%m-%d %H:%M UTC"
 
 n_tsteps = t.shape[0]
 tstep = 0
 
 y_cb = y.contiguous_bounds()
-x_cb = x.contiguous_bounds()
-z_cb = z.contiguous_bounds()
-z_fix = np.arange(*z_cb.shape) * np.mean(np.diff(x_cb)) * 2
+x_cb = x.contiguous_bounds() #degrees
+z_cb = z.contiguous_bounds() #in m
+
+Re = 6371000 # Earth radius in m
+z_h = z_cb/Re #z_cb in Earth radii
+
+zscale = np.mean(np.diff(y_cb))*(np.pi/180) / (2*np.mean(np.diff(z_h))) #
+z_fix = z_h
 
 xx, yy, zz = np.meshgrid(x_cb, y_cb, z_fix, indexing="ij")
 shape = xx.shape
@@ -430,7 +440,7 @@ clim = clim_log_scale if log_scale else clim_isosurfaces
 
 isosurfaces_range = clim_isosurfaces
 
-xyz = to_cartesian(xx, yy, zlevel=zz, zscale=0.005)
+xyz = to_cartesian(xx, yy, zlevel=zz, zscale=zscale)
 mesh = pv.StructuredGrid(xyz[:, 0].reshape(shape), xyz[:, 1].reshape(shape), xyz[:, 2].reshape(shape))
 
 domain = mesh.extract_feature_edges()
@@ -446,7 +456,7 @@ p.set_background(color="black")
 
 sargs = {
     "color": color,
-    "title": f"{capitalise(cube.name())} ({str(cube.units)})",
+    "title": f"{capitalise(cube.name())}" + r" $(\mu g \ m^{-3})$",
     "fmt": "%.1f",
 }
 
@@ -467,21 +477,23 @@ actor_domain = p.add_mesh(domain, color="orange", line_width=1, render=False, re
 actor_domain.SetVisibility(False)
 
 geolocator = Nominatim(user_agent="geovista")
-release_location = " ".join(cube.attributes["release_location"].split()[::-1])
-location = geolocator.geocode(release_location, language="en")
+release_location = cube.attributes["release_location"].split()
+location = GeocodeDummy(address="Reykjanes Peninsula, Iceland", longitude=-1*float(release_location[0][:-1]), latitude=float(release_location[1][:-1]))
 
 p.add_points(xs=location.longitude, ys=location.latitude, render_points_as_spheres=True, color="orange", point_size=10, reset_camera=False)
 actor_base = p.add_base_layer(texture=geovista.blue_marble(), zlevel=0, resolution="c192")
 p.add_coastlines(color="lightgray", zlevel=0, reset_camera=False)
 p.add_axes(color=color)
 
-p.add_text(location.address, position="upper_left", font_size=15, color=color, shadow=False)
 
 text = unit.num2date(t.points[tstep]).strftime(fmt)
 actor = p.add_text(text, position="lower_left", font_size=15, color=color, shadow=False)
 
 fname = BASE_DIR / "images" / "reykjanes_inset.png"
-p.add_logo_widget(fname, position=(0.93, 0.91), size=(0.08, 0.08))
+p.add_logo_widget(fname, position=(0.00, 0.91), size=(0.08, 0.08))
+
+p.add_text(f"Sundhnúkur: {-1*location.longitude}" + r'$\degree$W'+ f" {location.latitude}" + r'$\degree$N', position=(0.08,0.95),viewport=True, font_size=15, color=color, shadow=False)
+p.add_text(f"{location.address}\nVertical Scale Factor: x{zscale:.2f}", position=(0.08,0.90),viewport=True, font_size=10, color=color, shadow=False)# )
 
 #
 # sliders
@@ -504,7 +516,7 @@ p.add_slider_widget(
 
 actor_threshold = p.add_slider_widget(
     callback_threshold,
-    (0.0, 500.0),
+    (0.1, 500.0),
     value=threshold,
     pointa=(0.55, 0.80),
     pointb=(0.90, 0.80),
@@ -513,7 +525,7 @@ actor_threshold = p.add_slider_widget(
     style="modern",
     slider_width=0.02,
     tube_width=0.001,
-    title=f"Threshold ({str(cube.units)})",
+    title=r"Threshold $(\mu g \ m^{-3})$",
     title_height=0.02,
 )
 
@@ -521,8 +533,8 @@ actor_isosurfaces = p.add_slider_widget(
     callback_isosurfaces,
     (10, 3000),
     value=isosurfaces,
-    pointa=(0.10, 0.90),
-    pointb=(0.45, 0.90),
+    pointa=(0.10, 0.850),
+    pointb=(0.45, 0.850),
     color=color,
     fmt="%.0f",
     style="modern",
@@ -538,14 +550,14 @@ actor_min = p.add_slider_widget(
     callback_min,
     isosurfaces_range,
     value=vmin,
-    pointa=(0.10, 0.80),
-    pointb=(0.45, 0.80),
+    pointa=(0.10, 0.75),
+    pointb=(0.45, 0.75),
     color=color,
     fmt="%.0f",
     style="modern",
     slider_width=0.02,
     tube_width=0.001,
-    title=f"Isosurface Range ({str(cube.units)})",
+    title=r"Isosurface Range  $(\mu g \ m^{-3})$",
     title_height=0.02,
 )
 actor_min.GetRepresentation().SetVisibility(False)
@@ -554,8 +566,8 @@ actor_max = p.add_slider_widget(
     callback_max,
     isosurfaces_range,
     value=vmax,
-    pointa=(0.10, 0.80),
-    pointb=(0.45, 0.80),
+    pointa=(0.10, 0.75),
+    pointb=(0.45, 0.75),
     color=color,
     fmt="%.0f",
     style="modern",
