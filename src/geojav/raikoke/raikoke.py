@@ -24,59 +24,51 @@ from matplotlib.colors import ListedColormap
 
 BASE_DIR = Path(__file__).parent
 
-Re = 6371 * 1000 * 3.281 #Earth radius in feet taking 1 m = 3.281 Ft
+Re = 6371 * 1000 * 3.281 # Earth radius in feet taking 1 m = 3.281 Ft
+
+feet = Unit("feet")
+meter = Unit("meter")
+
 #
 # callback state
 #
 reset_clip = False
 show_clip = False
 show_edges = True
+show_flight = False
 show_isosurfaces = False
 show_opacity = False
 show_smooth = False
-threshold = 0.2
+threshold = min_threshold = 0.2
 isosurfaces = 200
-isosurfaces_range = (0, 6)
+isosurfaces_range = (min_threshold, 6.0)
 iterations = 20
 passband = 0.1
-color_by_qva_index = True
-active_scalar = "qva_index"
+flight_level = 0
 
 
 class GeocodeDummy:
-    def __init__(self,address,longitude,latitude):
+    def __init__(self, address, longitude,latitude):
         self.address = address
         self.longitude = longitude
         self.latitude = latitude
-
-def calculate_qva_index(data):
-
-    data = np.where(data >= 10, 11, data)
-    data = np.where((data >= 5) & (data < 10), 7.5, data)
-    data = np.where((data >= 2) & (data < 5), 3.5, data)
-    data = np.where((data >= 0.2) & (data < 2), 1, data)
-    data = np.where(data < 0.2, 0, data)
-
-    return data
-
-def rgb(r, g, b):
-    return (r / 256, g / 256, b / 256, 1.0)
 
 
 def rgba(r, g, b):
     return np.array([r / 256, g / 256, b / 256, 1.0])
 
 
-def qva(vmin=0, vmax=13):
-    N = 2560
-    mapping = np.linspace(vmin, vmax, N, dtype=np.double)
-    colors = np.empty((N, 4))
+def qva(vmin=0.2, vmax=13.0):
+    step = 0.01
+    mapping = np.arange(vmin, vmax + step, step)
+    N = mapping.size
 
-    c00 = rgba(211,211,211)   # 0.0-0.2 mg/m3 (very low)
-    c01 = rgba(160, 210, 255)   # 0.2-2.0 mg/m3 (low)
-    c02 = rgba(255, 153, 0)     # 2.0-5.0 (medium)
-    c03 = rgba(255, 40, 0)      # 5.0-10.0 (high)
-    c04 = rgba(170, 0, 170)     # >=10.0 (very high)
+    colors = np.empty((N, 4), dtype=float)
+
+    c01 = rgba(160, 210, 255)   # [vmin,  2.0) - low
+    c02 = rgba(255, 153, 0)     # [2.0,   5.0) - medium
+    c03 = rgba(255, 40, 0)      # [5.0,  10.0) - high
+    c04 = rgba(170, 0, 170)     # [10.0, vmax] - very high
 
     colors[mapping >= 10] = c04
     colors[mapping < 10] = c03
@@ -84,7 +76,7 @@ def qva(vmin=0, vmax=13):
     colors[mapping < 2] = c01
     colors[mapping < 0.2] = c00
 
-    return ListedColormap(colors, N=N)
+    return ListedColormap(colors, name="qva", N=N)
 
 
 def cache(mesh, data, tstep) -> pv.UnstructuredGrid:
@@ -94,8 +86,7 @@ def cache(mesh, data, tstep) -> pv.UnstructuredGrid:
     if not fname.exists():
         tdata = np.ma.masked_less_equal(data[tstep][:], 0).filled(np.nan).flatten()
         mesh["data"] = tdata
-        qva_index = calculate_qva_index(data[tstep][:]).flatten()
-        mesh["qva_index"] = qva_index
+        mesh["idx"] = np.arange(mesh.n_cells)
         to_wkt(mesh, WGS84)
         mesh.active_scalars_name = "data"
         tmp = mesh.threshold()
@@ -117,6 +108,13 @@ def callback_iterations(value) -> None:
     global iterations
 
     iterations = int(f"{value:.0f}")
+    callback_render(None)
+
+
+def callback_flight(value) -> None:
+    global flight_level
+
+    flight_level = int(f"{value:.0f}") // 50
     callback_render(None)
 
 
@@ -167,6 +165,7 @@ def checkbox_clip(flag: bool) -> None:
     global show_isosurfaces
     global show_smooth
     global show_edges
+    global show_flight
     global actor_checkbox_isosurface
     global actor_isosurfaces
     global actor_threshold
@@ -176,6 +175,8 @@ def checkbox_clip(flag: bool) -> None:
     global actor_iterations
     global actor_passband
     global actor_checkbox_edges
+    global actor_checkbox_flight
+    global actor_flight
 
     show_clip = bool(flag)
 
@@ -183,10 +184,12 @@ def checkbox_clip(flag: bool) -> None:
         actor_checkbox_isosurface.GetRepresentation().SetState(0)
         actor_checkbox_smooth.GetRepresentation().SetState(0)
         actor_checkbox_edges.GetRepresentation().SetState(1)
+        actor_checkbox_flight.GetRepresentation().SetState(0)
 
         show_isosurfaces = False
         show_smooth = False
         show_edges = True
+        show_flight = False
 
         actor_isosurfaces.GetRepresentation().SetVisibility(False)
         actor_min.GetRepresentation().SetVisibility(False)
@@ -194,6 +197,7 @@ def checkbox_clip(flag: bool) -> None:
         actor_threshold.GetRepresentation().SetVisibility(False)
         actor_iterations.GetRepresentation().SetVisibility(False)
         actor_passband.GetRepresentation().SetVisibility(False)
+        actor_flight.GetRepresentation().SetVisibility(False)
     else:
         actor_threshold.GetRepresentation().SetVisibility(True)
 
@@ -215,15 +219,42 @@ def checkbox_edges(flag: bool) -> None:
         callback_render(None)
 
 
+def checkbox_flight(flag: bool) -> None:
+    global show_flight
+    global show_clip
+    global show_isosurfaces
+    global actor_checkbox_flight
+    global actor_flight
+    global actor_threshold
+
+    if show_clip or show_isosurfaces:
+        show_flight = False
+        actor_checkbox_flight.GetRepresentation().SetState(0)
+        actor_threshold.GetRepresentation().SetVisibility(False)
+    else:
+        show_flight = bool(flag)
+
+    actor_flight.GetRepresentation().SetVisibility(show_flight)
+
+    if not (show_clip or show_isosurfaces):
+        state = not show_flight
+        if state and show_isosurfaces:
+            state = False
+        actor_threshold.GetRepresentation().SetVisibility(state)
+        callback_render(None)
+
+
 def checkbox_isosurfaces(flag: bool) -> None:
     global show_isosurfaces
     global show_clip
     global show_smooth
+    global show_flight
     global actor_isosurfaces
     global actor_threshold
     global actor_min
     global actor_max
     global actor_checkbox_isosurface
+    global actor_checkbox_flight
 
     if show_clip:
         show_isosurfaces = False
@@ -241,6 +272,10 @@ def checkbox_isosurfaces(flag: bool) -> None:
         if state and show_smooth:
             state = False
         actor_threshold.GetRepresentation().SetVisibility(state)
+        if show_isosurfaces:
+            show_flight = False
+            actor_checkbox_flight.GetRepresentation().SetState(0)
+            actor_flight.GetRepresentation().SetVisibility(False)
         callback_render(None)
 
 
@@ -338,7 +373,14 @@ def callback_render(value) -> None:
     global actor_scalar
     global iterations
     global passband
-    global active_scalar
+    global min_threshold
+    global flight_level
+    global n_hcells
+    global title
+    global actor_title
+    global feet
+    global meter
+
 
     if value is None:
         value = tstep
@@ -350,7 +392,10 @@ def callback_render(value) -> None:
 
     frame = cache(mesh, data, tstep)
 
-    if not show_isosurfaces and threshold:
+    if show_isosurfaces:
+        if min_threshold:
+            frame = frame.threshold(min_threshold)
+    elif threshold:
         frame = frame.threshold(threshold)
 
     if frame.is_empty:
@@ -363,6 +408,9 @@ def callback_render(value) -> None:
         if show_clip:
             xyz = np.asarray(frame.center)
             norm = np.linalg.norm(xyz)
+
+            p.remove_actor("flight")
+            actor_title.SetInput(title)
 
             p.add_mesh_clip_plane(
                 frame,
@@ -409,6 +457,32 @@ def callback_render(value) -> None:
                 p.remove_actor(actor_scalar)
                 show_scalar_bar = True
 
+            if show_flight:
+                idx = frame["idx"]
+                mask = np.where((idx >= n_hcells*flight_level) & (idx < n_hcells*(flight_level+1)))[0]
+                if mask.size > 0:
+                    flight = frame.extract_cells(mask)
+                    p.add_mesh(
+                        flight,
+                        name="flight",
+                        color="white" if flight_level % 2 else "black",
+                        line_width=4,
+                        style="wireframe",
+                        render=False,
+                        reset_camera=False,
+                        render_lines_as_tubes=True,
+                    )
+                    lower = int(feet.convert(flight_level*50*100, meter))
+                    upper = int(feet.convert((flight_level+1)*50*100, meter))
+                    text = f"{title}\t\tAltitude: {lower:>6,} - {upper:>6,}m (AMSL)\t\tFlight Level: {flight_level*50:,} - {(flight_level+1)*50:,}"
+                    actor_title.SetInput(text)
+                else:
+                    p.remove_actor("flight")
+                    actor_title.SetInput(title)
+            else:
+                p.remove_actor("flight")
+                actor_title.SetInput(title)
+
             p.add_mesh(
                 frame,
                 name="plume",
@@ -430,7 +504,7 @@ def callback_render(value) -> None:
                 p.add_actor(actor_scalar)
 
     reset_clip = False
-    actor.SetText(0, unit.num2date(t.points[tstep]).strftime(fmt))
+    actor.SetText(3, unit.num2date(t.points[tstep]).strftime(fmt))
 
 
 # sort the assets in date ascending date order
@@ -456,19 +530,21 @@ y_cb = y.contiguous_bounds()
 x_cb = x.contiguous_bounds()
 z_cb = z.contiguous_bounds()
 
+n_hcells = (x_cb.size - 1) * (y_cb.size - 1)
+
 zscale = np.mean(np.diff(y_cb))*(np.pi/180)/(np.mean(np.diff(z_cb))*100/Re) #mean latitude step (radians)/mean altitude step (feet) over Earth Radius
 z_h =(z_cb*100)/Re*zscale
 
 xx, yy, zz = np.meshgrid(x_cb, y_cb, z_h, indexing="ij")
 shape = xx.shape
 
-dmin, dmax = 0.0, 13
+dmin, dmax = 0.2, 13.0
 clim = (dmin, dmax)
 
 xyz = to_cartesian(xx, yy, zlevel=zz, zscale=1)
 mesh = pv.StructuredGrid(xyz[:, 0].reshape(shape), xyz[:, 1].reshape(shape), xyz[:, 2].reshape(shape))
 
-cmap = qva()
+cmap = qva(*clim)
 color = "white"
 
 
@@ -486,7 +562,6 @@ sargs = {
 }
 
 annotations = {
-    0.0 : "",
     0.2: "0.2",
     # 1.0: "Low",
     2.0: "2.0",
@@ -506,7 +581,7 @@ actor_plume = p.add_mesh(
     show_scalar_bar=False,
     show_edges=show_edges,
     edge_color="gray",
-    annotations=annotations
+    annotations=annotations,
 )
 p.view_poi()
 actor_scalar = p.add_scalar_bar(mapper=actor_plume.mapper, **sargs)
@@ -516,24 +591,44 @@ try:
     location = geolocator.geocode("Raikoke", language="en")
 except GeocoderUnavailable:
     print("Error: Geocoder Unavailable - possibly due to poor connection")
-    location = GeocodeDummy(address = "No address avilable (Geocode error)",latitude=153.25,longitude=48.292)
+    location = GeocodeDummy(address = "No address avilable (Geocode error)", latitude=153.25, longitude=48.292)
+
 raikoke = GeocodeDummy(address=location.address, latitude=48.292, longitude=153.25)
 
-p.add_points(xs=raikoke.longitude, ys=raikoke.latitude, render_points_as_spheres=True, color="yellow", point_size=10)
+p.add_points(
+    xs=raikoke.longitude,
+    ys=raikoke.latitude,
+    render_points_as_spheres=True,
+    color="yellow",
+    point_size=10
+)
 actor_base = p.add_base_layer(texture=geovista.blue_marble(), zlevel=0, resolution="c192")
 p.add_coastlines(color="lightgray")
 p.add_axes(color=color)
 
-#Defining Raikoke Legend
+# Defining Raikoke Legend
 fname = BASE_DIR / "images" / "raikoke_inset.png"
 p.add_logo_widget(fname, position=(0.00, 0.91), size=(0.08, 0.08))
-p.add_text(f"Raikoke: {raikoke.latitude}" + r'$\degree$N'+ f" {raikoke.longitude}" + r'$\degree$E', position=(0.08,0.96),viewport=True, font_size=15, color=color, shadow=False)
-p.add_text(f"{raikoke.address[9:]} \nVertical Scale Factor: x{zscale:.2f}", position=(0.08,0.91),viewport=True, font_size=10, color=color, shadow=False)
+
+title = f"Raikoke: {raikoke.latitude}" + r'$\degree$N' + f" {raikoke.longitude}" + r'$\degree$E'
+actor_title = p.add_text(
+    title,
+    position=(0.08,0.96),
+    viewport=True,
+    font_size=15,
+    color=color,
+)
+
+p.add_text(
+    f"{raikoke.address[9:]} \nVertical Scale Factor: x{zscale:.2f}",
+    position=(0.08,0.91),
+    viewport=True,
+    font_size=10,
+    color=color,
+)
 
 text = unit.num2date(t.points[tstep]).strftime(fmt)
-actor = p.add_text(text, position="lower_left", font_size=15, color=color, shadow=False)
-
-
+actor = p.add_text(text, position="upper_right", font_size=15, color=color, shadow=False)
 
 #
 # sliders
@@ -543,8 +638,8 @@ p.add_slider_widget(
     callback_render,
     (0, n_tsteps-1),
     value=0,
-    pointa=(0.55, 0.90),
-    pointb=(0.90, 0.90),
+    pointa=(0.55, 0.85),
+    pointb=(0.90, 0.85),
     color=color,
     fmt="%.0f",
     style="modern",
@@ -556,10 +651,10 @@ p.add_slider_widget(
 
 actor_threshold = p.add_slider_widget(
     callback_threshold,
-    (0.2, 5),
+    (0.2, 6.0),
     value=threshold,
-    pointa=(0.55, 0.80),
-    pointb=(0.90, 0.80),
+    pointa=(0.55, 0.75),
+    pointb=(0.90, 0.75),
     color=color,
     fmt="%.2f",
     style="modern",
@@ -573,8 +668,8 @@ actor_isosurfaces = p.add_slider_widget(
     callback_isosurfaces,
     (10, 3000),
     value=isosurfaces,
-    pointa=(0.10, 0.90),
-    pointb=(0.45, 0.90),
+    pointa=(0.10, 0.85),
+    pointb=(0.45, 0.85),
     color=color,
     fmt="%.0f",
     style="modern",
@@ -590,8 +685,8 @@ actor_min = p.add_slider_widget(
     callback_min,
     isosurfaces_range,
     value=vmin,
-    pointa=(0.10, 0.80),
-    pointb=(0.45, 0.80),
+    pointa=(0.10, 0.75),
+    pointb=(0.45, 0.75),
     color=color,
     fmt="%.2f",
     style="modern",
@@ -606,8 +701,8 @@ actor_max = p.add_slider_widget(
     callback_max,
     isosurfaces_range,
     value=vmax,
-    pointa=(0.10, 0.80),
-    pointb=(0.45, 0.80),
+    pointa=(0.10, 0.75),
+    pointb=(0.45, 0.75),
     color=color,
     fmt="%.2f",
     style="modern",
@@ -621,8 +716,8 @@ actor_iterations = p.add_slider_widget(
     callback_iterations,
     (5, 100),
     value=iterations,
-    pointa=(0.55, 0.80),
-    pointb=(0.90, 0.80),
+    pointa=(0.55, 0.75),
+    pointb=(0.90, 0.75),
     color=color,
     fmt="%.0f",
     style="modern",
@@ -637,8 +732,8 @@ actor_passband = p.add_slider_widget(
     callback_passband,
     (0.01, 2),
     value=passband,
-    pointa=(0.55, 0.70),
-    pointb=(0.90, 0.70),
+    pointa=(0.55, 0.65),
+    pointb=(0.90, 0.65),
     color=color,
     fmt="%.2f",
     style="modern",
@@ -649,6 +744,21 @@ actor_passband = p.add_slider_widget(
 )
 actor_passband.GetRepresentation().SetVisibility(False)
 
+actor_flight = p.add_slider_widget(
+    callback_flight,
+    (z_cb[0], z_cb[-1]),
+    value=flight_level,
+    pointa=(0.10, 0.85),
+    pointb=(0.45, 0.85),
+    color=color,
+    fmt="%.0f",
+    style="modern",
+    slider_width=0.02,
+    tube_width=0.001,
+    title=r"Flight Level",
+    title_height=0.02,
+)
+actor_flight.GetRepresentation().SetVisibility(False)
 
 #
 # checkboxes
@@ -703,6 +813,23 @@ actor_checkbox_isosurface = p.add_checkbox_button_widget(
 )
 p.add_text(
     "Isosurfaces",
+    position=(x + size + offset, y),
+    font_size=font_size,
+    color=color,
+)
+
+y += size + pad
+
+actor_checkbox_flight = p.add_checkbox_button_widget(
+    checkbox_flight,
+    value=show_flight,
+    color_on="green",
+    color_off="red",
+    size=size,
+    position=(x, y),
+)
+p.add_text(
+    "Flight Level",
     position=(x + size + offset, y),
     font_size=font_size,
     color=color,
