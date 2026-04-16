@@ -45,7 +45,7 @@ isosurfaces_range = (min_threshold, 6.0)
 iterations = 20
 passband = 0.1
 flight_level = 0
-
+active_scalar = "data"
 
 class GeocodeDummy:
     def __init__(self, address, longitude,latitude):
@@ -74,7 +74,6 @@ def qva(vmin=0.2, vmax=13.0):
     colors[mapping < 10] = c03
     colors[mapping < 5] = c02
     colors[mapping < 2] = c01
-    colors[mapping < 0.2] = c00
 
     return ListedColormap(colors, name="qva", N=N)
 
@@ -293,12 +292,6 @@ def checkbox_opacity(flag: bool) -> None:
         p.disable_depth_peeling()
         actor_base.GetProperty().SetOpacity(1.0)
 
-def toggle_active_scalar(flag: bool) -> None:
-    global active_scalar
-    active_scalar = "qva_index" if flag else "data"
-    print(f"Active scalar: {active_scalar}")
-    callback_render(None)
-
 def add_sphere_segment(fl,border=False,wireframe=False):
     global p, Re, zscale, frame
     center = (0,0,0)
@@ -356,7 +349,7 @@ def callback_render(value) -> None:
     global fmt
     global t
     global unit
-    global actor
+    global actor_time
     global clim
     global p
     global cmap
@@ -504,7 +497,7 @@ def callback_render(value) -> None:
                 p.add_actor(actor_scalar)
 
     reset_clip = False
-    actor.SetText(3, unit.num2date(t.points[tstep]).strftime(fmt))
+    actor_time.SetText(0, unit.num2date(t.points[tstep]).strftime(fmt))
 
 
 # sort the assets in date ascending date order
@@ -628,7 +621,7 @@ p.add_text(
 )
 
 text = unit.num2date(t.points[tstep]).strftime(fmt)
-actor = p.add_text(text, position="upper_right", font_size=15, color=color, shadow=False)
+actor_time = p.add_text(text, position="lower_left", font_size=15, color=color, shadow=False)
 
 #
 # sliders
@@ -870,20 +863,4 @@ p.add_text(
 )
 
 y+= size + pad
-
-p.add_checkbox_button_widget(
-    toggle_active_scalar,
-    value=color_by_qva_index,
-    color_on="green",
-    color_off="red",
-    size=size,
-    position=(x, y),
-)
-p.add_text(
-    "Colour by QVA Index",
-    position=(x + size + offset, y),
-    font_size=font_size,
-    color=color,
-)
-
 p.show()
