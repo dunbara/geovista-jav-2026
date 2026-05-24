@@ -126,6 +126,7 @@ def callback_iterations(value) -> None:
     iterations = int(f"{value:.0f}")
 
     p.remove_actor(PICKED_REPRESENTATION_NAMES["element"])
+    p.remove_actor("picked")
 
     callback_render(None)
 
@@ -172,6 +173,7 @@ def callback_passband(value) -> None:
     passband = float(f"{value:.2f}")
 
     p.remove_actor(PICKED_REPRESENTATION_NAMES["element"])
+    p.remove_actor("picked")
 
     callback_render(None)
 
@@ -183,6 +185,7 @@ def callback_threshold(value) -> None:
     threshold = value
 
     p.remove_actor(PICKED_REPRESENTATION_NAMES["element"])
+    p.remove_actor("picked")
 
     callback_render(None)
 
@@ -352,9 +355,6 @@ def checkbox_picking(flag: bool) -> None:
     global feet
     global meter
     global n_hcells
-    global feet
-    global meter
-    global n_hcells
     global frame
 
     def picking_callback(pick) -> None:
@@ -362,23 +362,18 @@ def checkbox_picking(flag: bool) -> None:
         global actor_hud
         global n_hcells
         global frame
+
         # for name in p.actors.keys():
         #     if name.startswith("vtkOpenGLActor"):
         #         p.remove_actor(name)
         #         break
-        cell_idx = pick["idx"][0]
 
-        xyz = pick.cell_centers().points[0]
-        idx = frame["idx"]
-        cell_index = np.where(idx==cell_idx)
-        #print(f"Cell ID: {cell_id}")
+        idx = pick["idx"][0]
+        frame_idx = np.where(frame["idx"]==idx)
 
-        cell = frame.extract_cells(cell_index)
+        frame_cell = frame.extract_cells(frame_idx)
 
-        p.add_mesh(cell, style="wireframe",pickable=False, color="white", line_width=5, render_lines_as_tubes=True, name="picked")
-
-
-        xyz = cell.cell_centers().points[0]
+        xyz = frame_cell.cell_centers().points[0]
         radius = np.linalg.norm(xyz)
         lon, lat = to_lonlat(xyz, radius=radius)
         location = latlon(lat, lon)
@@ -386,12 +381,22 @@ def checkbox_picking(flag: bool) -> None:
         sample = pick["data"][0]
 
         flight_level = pick["idx"][0] // n_hcells
-        flight_level = cell_idx // n_hcells
+        flight_level = idx // n_hcells
         lower = int(feet.convert(flight_level*50*100, meter))
         upper = int(feet.convert((flight_level+1)*50*100, meter))
 
         hud = f"{location}, {lower:,}-{upper:,}m [FL: {flight_level*50:,}-{(flight_level+1)*50:,}], " + f"{sample:.2f}" + r"mg m$^{\text{-3}}$"
         actor_hud.SetText(0, f"{hud}")
+
+        p.add_mesh(
+            frame_cell,
+            style="wireframe",
+            pickable=False,
+            color="white",
+            line_width=3,
+            render_lines_as_tubes=True,
+            name="picked"
+        )
 
     if show_clip or show_isosurfaces:
         show_picking = False
@@ -426,6 +431,7 @@ def checkbox_smooth(flag: bool) -> None:
     global p
 
     p.remove_actor(PICKED_REPRESENTATION_NAMES["element"])
+    p.remove_actor("picked")
 
     if show_clip:
         show_smooth = False
