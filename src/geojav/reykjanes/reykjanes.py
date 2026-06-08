@@ -398,7 +398,7 @@ def callback_render(value) -> None:
                 p.remove_actor("plume")
 
     reset_clip = False
-    actor.SetText(0, unit.num2date(t.points[tstep]).strftime(fmt))
+    actor.SetText(3, unit.num2date(t.points[tstep]).strftime(fmt))
 
 
 # sort the assets in date ascending date order
@@ -488,7 +488,7 @@ p.add_coastlines(color="lightgray", zlevel=0, reset_camera=False)
 
 
 text = unit.num2date(t.points[tstep]).strftime(fmt)
-actor = p.add_text(text, position="lower_left", font_size=15, color=color, shadow=False)
+actor = p.add_text(text, position="upper_right", font_size=15, color=color, shadow=False)
 
 fname = BASE_DIR / "images" / "reykjanes_inset.png"
 p.add_logo_widget(fname, position=(0.00, 0.91), size=(0.08, 0.08))
