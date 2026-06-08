@@ -484,7 +484,7 @@ location = GeocodeDummy(address="Reykjanes Peninsula, Iceland", longitude=-1*flo
 p.add_points(xs=location.longitude, ys=location.latitude, render_points_as_spheres=True, color="orange", point_size=10, reset_camera=False)
 actor_base = p.add_base_layer(texture=geovista.blue_marble(), zlevel=0, resolution="c192")
 p.add_coastlines(color="lightgray", zlevel=0, reset_camera=False)
-p.add_axes(color=color)
+#p.add_axes(color=color)
 
 
 text = unit.num2date(t.points[tstep]).strftime(fmt)
@@ -517,7 +517,7 @@ p.add_slider_widget(
 
 actor_threshold = p.add_slider_widget(
     callback_threshold,
-    (0.1, 500.0),
+    (0.0, 500.0),
     value=threshold,
     pointa=(0.55, 0.80),
     pointb=(0.90, 0.80),
