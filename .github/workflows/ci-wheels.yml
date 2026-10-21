@@ -39,7 +39,7 @@ jobs:
     runs-on: "ubuntu-latest"
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -53,7 +53,7 @@ jobs:
         run: |
           ls -l ${{ github.workspace }}/dist
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: pypi-artifacts-${{ github.job }}-${{ strategy.job-index }}
           path: ${{ github.workspace }}/dist
@@ -70,22 +70,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ["py312", "py313"]
+        version: ["py313", "py314"]
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: pypi-artifacts-*
           path: ${{ github.workspace }}/dist
           merge-multiple: true
 
       - name: "setup pixi"
-        uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11
+        uses: prefix-dev/setup-pixi@9dabb60412d3d2d967a8d682f7ce01317af40514
         with:
           cache-write: false
           environments: "${{ matrix.version }}"
@@ -105,7 +105,7 @@ jobs:
     runs-on: "ubuntu-latest"
 
     steps:
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
       with:
         pattern: pypi-artifacts-*
         path: ${{ github.workspace }}/dist
@@ -127,13 +127,13 @@ jobs:
     # upload to Test PyPI for every commit on main branch
     if: ${{ github.event_name == 'push' && github.event.ref == 'refs/heads/main' }}
     steps:
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
       with:
         pattern: pypi-artifacts-*
         path: ${{ github.workspace }}/dist
         merge-multiple: true
 
-    - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+    - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
       with:
         repository-url: https://test.pypi.org/legacy/
         skip-existing: true
@@ -151,12 +151,12 @@ jobs:
     # upload to PyPI for every tag starting with 'v'
     if: ${{ github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/v') }}
     steps:
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
       with:
         pattern: pypi-artifacts-*
         path: ${{ github.workspace }}/dist
         merge-multiple: true
 
-    - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+    - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
       with:
         print-hash: true
