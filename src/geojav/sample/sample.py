@@ -3,6 +3,14 @@ import pyvista as pv
 from geovista.qt import GeoBackgroundPlotter
 from pathlib import Path
 
+############################################################################
+# Minimal example of using geojav to visualise a single precomputed time   #
+# step of the Reykjanes Sulphur dioxide cloud created to illustrate the    #
+# use of geovista in the geojav project. The mesh is loaded from a VTK     #
+# file and visualised with a base layer, coastlines, and a point marker    #
+# for the source location.                                                 #
+#Run with "python -i sample.py" within the geojav pixi or conda environment#
+############################################################################
 
 BASE_DIR = Path(__file__).parent
 fname = BASE_DIR/'reykjanes_043.vtk' #path to mesh for time step 159
